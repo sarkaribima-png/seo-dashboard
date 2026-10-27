@@ -14,7 +14,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   if (!ready) return <div className="center muted">Loading…</div>;
   const L = (href: string, t: string) => <Link href={href} className={path === href ? "on" : ""}>{t}</Link>;
   return (<>
-    <div className="nav"><b>SEO Agent</b>{L("/", "Overview")}{L("/proposals", "Proposals")}{L("/audits", "Audits")}{L("/brain", "Site Brain")}{L("/seo-brain", "SEO Brain")}<span className="sp" />
+    <div className="nav"><b>SEO Agent</b>{L("/", "Overview")}{L("/proposals", "Proposals")}{L("/audits", "Audits")}{L("/brain", "Site Brain")}{L("/seo-brain", "SEO Brain")}{L("/content", "Content")}<span className="sp" />
       <span className="muted small">{email}</span>
       <button onClick={async () => { await supabase.auth.signOut(); router.replace("/login"); }}>Sign out</button></div>
     <div className="wrap">{children}</div></>);
