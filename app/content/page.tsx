@@ -15,7 +15,7 @@ export default function Content() {
   const [ideas, setIdeas] = useState<any[]>([]); const [counts, setCounts] = useState({ pages: 0, kws: 0 });
   const [filter, setFilter] = useState("suggested"); const [words, setWords] = useState<Record<number, number>>({});
 
-  useEffect(() => { supabase.from("sites").select("id").order("id").then(({ data }) => { setSites(data || []); if (data?.length) setSite(data[0].id); }); }, []);
+  useEffect(() => { supabase.from("sites").select("*").order("id").then(({ data }) => { setSites(data || []); if (data?.length) setSite(data[0].id); }); }, []);
   const load = useCallback(async () => {
     if (!site) return;
     const [i, p, k] = await Promise.all([
