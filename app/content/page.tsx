@@ -31,7 +31,7 @@ export default function Content() {
     if (!comp.trim()) { alert("Type the competitor domain first (e.g. example.com)."); return; }
     setBusy(true); setMsg("Reading file…");
     try {
-      const rows = await readCsv(f); const h = Object.keys(rows[0] || {}); const competitor = comp.trim().toLowerCase();
+      const rows = await readCsv(f); const h = Object.keys(rows[0] || {}); const competitor = comp.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
       if (h.includes("Current top keyword")) {
         const m = new Map<string, any>();
         rows.forEach(r => r.URL && m.set(r.URL, { site_id: site, competitor, url: r.URL, traffic: num(r["Current traffic"]) ?? 0,
