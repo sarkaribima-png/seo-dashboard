@@ -1,82 +1,117 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import Link from "next/link";
+import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import Shell from "@/components/Shell";
-import SiteSelect from "@/components/SiteSelect";
 import { runAgent, supabase } from "@/lib/supabase";
 
-const sum = (a: any[], k: string) => a.reduce((s, r) => s + (r[k] || 0), 0);
-const wpos = (a: any[]) => { const i = sum(a, "impressions"); return i ? a.reduce((s, r) => s + (r.position || 0) * (r.impressions || 0), 0) / i : null; };
-const delta = (n: number, p: number) => (p ? ((n - p) / p) * 100 : 0);
+const DAY = 864e5;
+const d10 = (t: number) => new Date(t).toISOString().slice(0, 10);
+const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+const sum = (a: any[], k: string) => a.reduce((s, r) => s + (+r[k] || 0), 0);
+const wpos = (a: any[]) => { const i = sum(a, "impressions"); return i ? a.reduce((s, r) => s + (+r.position || 0) * (+r.impressions || 0), 0) / i : null; };
+const pct = (n: number, p: number) => (p > 0 ? ((n - p) / p) * 100 : null);
+const bucket = (p: number) => (p <= 3 ? 0 : p <= 10 ? 1 : p <= 20 ? 2 : 3);
+const BUCKETS = ["#1–3", "#4–10", "#11–20", "#21+"];
+async function fetchAll(build: (f: number, t: number) => any) {
+  let out: any[] = []; for (let i = 0; i < 40; i++) { const { data } = await build(i * 1000, i * 1000 + 999); out = out.concat(data || []); if (!data || data.length < 1000) break; } return out;
+}
 
-export default function Overview() {
-  const [sites, setSites] = useState<any[]>([]); const [site, setSite] = useState("");
-  const [rows, setRows] = useState<any[]>([]); const [counts, setCounts] = useState<any>({});
-  const [device, setDevice] = useState("ALL"); const [msg, setMsg] = useState("");
+function Delta({ v, inv }: { v: number | null; inv?: boolean }) {
+  if (v == null || !isFinite(v)) return null;
+  const good = inv ? v < 0 : v > 0;
+  return <span className={good ? "up" : "down"} style={{ fontSize: 12 }}> {v > 0 ? "▲" : "▼"} {Math.abs(v).toFixed(0)}%</span>;
+}
+function Spark({ data, color }: { data: { v: number }[]; color: string }) {
+  if (data.length < 2) return <div style={{ height: 44 }} className="muted small">no data yet</div>;
+  return <div style={{ height: 44 }}><ResponsiveContainer><AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}><Area type="monotone" dataKey="v" stroke={color} fill={color} fillOpacity={0.18} strokeWidth={1.5} isAnimationActive={false} /></AreaChart></ResponsiveContainer></div>;
+}
 
-  useEffect(() => { supabase.from("sites").select("*").order("id").then(({ data }) => { setSites(data || []); if (data?.length) setSite(data[0].id); }); }, []);
+export default function Projects() {
+  const [sites, setSites] = useState<any[]>([]); const [gsc, setGsc] = useState<any[]>([]); const [kws, setKws] = useState<any[]>([]); const [rk, setRk] = useState<any[]>([]);
+  const [audits, setAudits] = useState<any[]>([]); const [props, setProps] = useState<any[]>([]); const [posts, setPosts] = useState<any[]>([]);
+  const [dev, setDev] = useState<"desktop" | "mobile">("desktop"); const [msg, setMsg] = useState(""); const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    if (!site) return;
-    const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-    supabase.from("gsc_by_day").select("*").eq("site_id", site).gte("date", since).order("date").then(({ data }) => setRows(data || []));
-    const c = (s: string) => supabase.from("proposals").select("id", { count: "exact", head: true }).eq("site_id", site).eq("status", s);
-    Promise.all(["pending", "approved", "applied", "failed"].map(c)).then(r => setCounts({ pending: r[0].count, approved: r[1].count, applied: r[2].count, failed: r[3].count }));
-  }, [site]);
+    (async () => {
+      const s = await supabase.from("sites").select("*").order("id"); setSites((s.data || []).filter((x: any) => x.active !== false));
+      const since = d10(Date.now() - 60 * DAY), since2 = d10(Date.now() - 24 * DAY);
+      const [g, k, r, a, p, c] = await Promise.all([
+        fetchAll((f, t) => supabase.from("gsc_by_day").select("site_id,date,device,clicks,impressions,position").gte("date", since).range(f, t)),
+        supabase.from("tracked_keywords").select("site_id,keyword,active"),
+        fetchAll((f, t) => supabase.from("rank_daily").select("site_id,keyword,day,device,position").gte("day", since2).range(f, t)),
+        fetchAll((f, t) => supabase.from("page_audits").select("site_id,page,h1,images_no_alt,risky_claims,schema_issues,audited_at").order("audited_at", { ascending: false }).range(f, t)),
+        fetchAll((f, t) => supabase.from("proposals").select("site_id,status").range(f, t)),
+        fetchAll((f, t) => supabase.from("content_posts").select("site_id,status").range(f, t))]);
+      setGsc(g); setKws((k.data || []).filter((x: any) => x.active !== false)); setRk(r); setAudits(a); setProps(p); setPosts(c); setLoading(false);
+    })();
+  }, []);
 
-  const cur = sites.find(s => s.id === site);
-  const byDate = useMemo(() => {
-    const m: any = {};
-    rows.filter(r => device === "ALL" || r.device === device).forEach(r => { (m[r.date] ||= []).push(r); });
-    return Object.keys(m).sort().map(d => ({ date: d.slice(5), clicks: sum(m[d], "clicks"), impressions: sum(m[d], "impressions") }));
-  }, [rows, device]);
-  const pos = useMemo(() => {
-    const m: any = {};
-    rows.forEach(r => { (m[r.date] ||= {})[r.device] = r; });
-    return Object.keys(m).sort().map(d => ({ date: d.slice(5), MOBILE: m[d].MOBILE ? +m[d].MOBILE.position?.toFixed(1) : null, DESKTOP: m[d].DESKTOP ? +m[d].DESKTOP.position?.toFixed(1) : null }));
-  }, [rows]);
-  const kp = useMemo(() => {
-    const dates = [...new Set(rows.map(r => r.date))].sort(); const last = dates.slice(-7), prev = dates.slice(-14, -7);
-    const f = (ds: string[], dev?: string) => rows.filter(r => ds.includes(r.date) && (!dev || r.device === dev));
-    return { c: [sum(f(last), "clicks"), sum(f(prev), "clicks")], i: [sum(f(last), "impressions"), sum(f(prev), "impressions")],
-      pm: [wpos(f(last, "MOBILE")), wpos(f(prev, "MOBILE"))], pd: [wpos(f(last, "DESKTOP")), wpos(f(prev, "DESKTOP"))] };
-  }, [rows]);
+  const cards = useMemo(() => sites.map(site => {
+    const id = site.id, now = Date.now(), c1 = d10(now - 28 * DAY), c0 = d10(now - 56 * DAY);
+    const g = gsc.filter(r => r.site_id === id), cur = g.filter(r => r.date >= c1), prev = g.filter(r => r.date >= c0 && r.date < c1);
+    const byDay = (key: string) => { const m: Record<string, number> = {}; cur.forEach(r => { m[r.date] = (m[r.date] || 0) + (+r[key] || 0); }); return Object.keys(m).sort().map(d => ({ v: m[d] })); };
+    const D = dev.toUpperCase();
+    const pos = wpos(cur.filter(r => r.device === D)), posPrev = wpos(prev.filter(r => r.device === D));
+    // tracked keywords: last 3 days vs the 7 days before, by position bucket
+    const ks = kws.filter(k => k.site_id === id).map(k => k.keyword); const rows = rk.filter(r => r.site_id === id && r.device === dev);
+    const last = d10(now - 3 * DAY), mid = d10(now - 10 * DAY); const counts = [0, 0, 0, 0], before = [0, 0, 0, 0]; let tracked = 0;
+    ks.forEach(k => {
+      const r = rows.filter(x => x.keyword === k && x.position != null);
+      const a = avg(r.filter(x => x.day >= last).map(x => +x.position)) ?? avg(r.sort((x, y) => y.day.localeCompare(x.day)).slice(0, 3).map(x => +x.position));
+      const b = avg(r.filter(x => x.day < last && x.day >= mid).map(x => +x.position));
+      if (a != null) { counts[bucket(a)]++; tracked++; } if (b != null) before[bucket(b)]++;
+    });
+    // health: share of audited pages with no issue
+    const seen = new Set<string>(); const pages: any[] = [];
+    audits.filter(a => a.site_id === id).forEach(a => { if (!seen.has(a.page)) { seen.add(a.page); pages.push(a); } });
+    const issue = (a: any) => a.h1 !== 1 || (a.images_no_alt || 0) > 0 || (a.risky_claims || []).length > 0 || (a.schema_issues || []).length > 0;
+    const bad = pages.filter(issue).length, health = pages.length ? Math.round(100 * (pages.length - bad) / pages.length) : null;
+    const pr = props.filter(p => p.site_id === id), cnt = (s: string) => pr.filter(p => p.status === s).length;
+    const po = posts.filter(p => p.site_id === id);
+    return { site, clicks: sum(cur, "clicks"), clicksP: sum(prev, "clicks"), impr: sum(cur, "impressions"), imprP: sum(prev, "impressions"), cs: byDay("clicks"), is: byDay("impressions"),
+      pos, posPrev, counts, before, tracked, ntracked: ks.length, health, pages: pages.length, noAlt: pages.filter(a => (a.images_no_alt || 0) > 0).length, badH1: pages.filter(a => a.h1 !== 1).length,
+      risky: pages.filter(a => (a.risky_claims || []).length).length, pending: cnt("pending"), approved: cnt("approved"), applied: cnt("applied"), failed: cnt("failed"),
+      published: po.filter(p => p.status === "published").length, drafts: po.filter(p => p.status === "draft").length };
+  }), [sites, gsc, kws, rk, audits, props, posts, dev]);
 
-  async function setMode(mode: string) {
+  async function setMode(site: any, mode: string) {
     if (mode === "live" && !confirm("Live mode: approved AND new title/meta proposals will be applied to the site (1 page/day). Continue?")) return;
-    const { error } = await supabase.from("sites").update({ mode }).eq("id", site);
-    if (error) alert(error.message); else setSites(sites.map(s => (s.id === site ? { ...s, mode } : s)));
+    const { error } = await supabase.from("sites").update({ mode }).eq("id", site.id);
+    if (error) alert(error.message); else setSites(sites.map(s => (s.id === site.id ? { ...s, mode } : s)));
   }
-  async function run(cmd: string) { setMsg("Starting…"); const r = await runAgent(cmd); setMsg(r.message); }
-  const Kpi = ({ l, v, d, inv }: any) => (<div className="card kpi"><div className="l">{l}</div><div className="v">{v}</div>
-    {d !== undefined && <div className={(inv ? d < 0 : d > 0) ? "up small" : "down small"}>{d > 0 ? "▲" : "▼"} {Math.abs(d).toFixed(1)}% vs prev 7d</div>}</div>);
+  async function run(cmd: string, id?: string) { setMsg("Starting…"); const r = await runAgent(cmd, undefined, id); setMsg(r.message); }
   const f1 = (x: number | null) => (x == null ? "–" : x.toFixed(1));
+  const hcol = (h: number | null) => (h == null ? "var(--mut)" : h >= 90 ? "var(--ok)" : h >= 70 ? "var(--warn)" : "var(--bad)");
 
   return (<Shell>
-    <div className="row"><h1 style={{ margin: 0 }}>Overview</h1><span className="sp" /><SiteSelect sites={sites} value={site} onChange={setSite} />
-      {cur && <select value={cur.mode} onChange={e => setMode(e.target.value)}><option value="dry-run">dry-run (proposals only)</option><option value="live">live (auto-apply 1/day)</option><option value="paused">paused</option></select>}
-      <button onClick={() => run("daily")}>Run now</button></div>
+    <div className="row"><h1 style={{ margin: 0 }}>Projects</h1><span className="muted small">last 28 days</span><span className="sp" />
+      <select value={dev} onChange={e => setDev(e.target.value as any)}><option value="desktop">Position: Desktop</option><option value="mobile">Position: Mobile</option></select>
+      <button onClick={() => run("daily")}>Run all sites now</button><Link href="/sites"><button className="ok">+ Add site</button></Link></div>
     {msg && <p className="muted small">{msg}</p>}
-    <div className="grid g4" style={{ marginBottom: 14 }}>
-      <Kpi l="Clicks (7d)" v={kp.c[0]} d={delta(kp.c[0], kp.c[1])} />
-      <Kpi l="Impressions (7d)" v={kp.i[0].toLocaleString()} d={delta(kp.i[0], kp.i[1])} />
-      <Kpi l="Avg position · Mobile" v={f1(kp.pm[0])} d={kp.pm[0] && kp.pm[1] ? delta(kp.pm[0], kp.pm[1]) : undefined} inv />
-      <Kpi l="Avg position · Desktop" v={f1(kp.pd[0])} d={kp.pd[0] && kp.pd[1] ? delta(kp.pd[0], kp.pd[1]) : undefined} inv /></div>
-    <div className="grid g4" style={{ marginBottom: 14 }}>
-      <a className="card kpi" href="/proposals"><div className="l">Pending approval</div><div className="v">{counts.pending ?? "–"}</div></a>
-      <div className="card kpi"><div className="l">Approved (waiting for run)</div><div className="v">{counts.approved ?? "–"}</div></div>
-      <div className="card kpi"><div className="l">Applied</div><div className="v">{counts.applied ?? "–"}</div></div>
-      <div className="card kpi"><div className="l">Failed</div><div className="v">{counts.failed ?? "–"}</div></div></div>
-    <div className="grid g2">
-      <div className="card"><div className="row" style={{ marginBottom: 4 }}><h2 style={{ margin: 0 }}>Clicks & impressions</h2><span className="sp" />
-        <select value={device} onChange={e => setDevice(e.target.value)}><option value="ALL">All devices</option><option value="MOBILE">Mobile</option><option value="DESKTOP">Desktop</option></select></div>
-        <div style={{ height: 260 }}><ResponsiveContainer><LineChart data={byDate}><CartesianGrid strokeDasharray="3 3" stroke="#8884" /><XAxis dataKey="date" fontSize={11} />
-          <YAxis yAxisId="l" fontSize={11} /><YAxis yAxisId="r" orientation="right" fontSize={11} /><Tooltip /><Legend />
-          <Line yAxisId="l" type="monotone" dataKey="clicks" stroke="#1f6feb" dot={false} /><Line yAxisId="r" type="monotone" dataKey="impressions" stroke="#8957e5" dot={false} /></LineChart></ResponsiveContainer></div></div>
-      <div className="card"><h2>Average position: mobile vs desktop</h2>
-        <div style={{ height: 260 }}><ResponsiveContainer><LineChart data={pos}><CartesianGrid strokeDasharray="3 3" stroke="#8884" /><XAxis dataKey="date" fontSize={11} />
-          <YAxis reversed domain={["auto", "auto"]} fontSize={11} /><Tooltip /><Legend />
-          <Line type="monotone" dataKey="MOBILE" stroke="#d29922" dot={false} connectNulls /><Line type="monotone" dataKey="DESKTOP" stroke="#1a7f4b" dot={false} connectNulls /></LineChart></ResponsiveContainer></div>
-        <p className="muted small">Lower is better. The data is 2-3 days behind (Search Console delay).</p></div></div>
-    {!sites.length && <p className="muted">No sites yet. Run the agent once (workflow "daily") to create the site row.</p>}
+    {loading && <p className="muted">Loading…</p>}
+    {cards.map(c => (<div key={c.site.id} className="card" style={{ marginBottom: 14 }}>
+      <div className="row" style={{ marginBottom: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 8, background: "var(--acc)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 700 }}>{c.site.domain[0].toUpperCase()}</div>
+        <div><b>{c.site.domain}</b> <span className="badge">{c.site.type === "static" ? "HTML" : "WordPress"}</span><div className="muted small">{c.site.gsc_property}</div></div><span className="sp" />
+        <select value={c.site.mode} onChange={e => setMode(c.site, e.target.value)}><option value="dry-run">dry-run</option><option value="live">live</option><option value="paused">paused</option></select>
+        <button onClick={() => run("daily", c.site.id)}>Run now</button><Link href={`/site?site=${c.site.id}`}><button>Details</button></Link></div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 18 }}>
+        <div><div className="muted small">Health score</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+            <div style={{ width: 54, height: 54, borderRadius: "50%", border: `4px solid ${hcol(c.health)}`, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 18 }}>{c.health ?? "–"}</div>
+            <div className="small muted">{c.pages ? <>{c.pages} pages audited<br />{c.noAlt} no alt · {c.badH1} H1 issue{c.risky ? <> · {c.risky} risky claim</> : null}</> : <a href="#" onClick={e => { e.preventDefault(); run("audit-all", c.site.id); }}>Run site audit</a>}</div></div></div>
+        <div><div className="muted small">Clicks</div><div style={{ fontSize: 24, fontWeight: 700 }}>{c.clicks.toLocaleString()}<Delta v={pct(c.clicks, c.clicksP)} /></div><Spark data={c.cs} color="#1f6feb" /></div>
+        <div><div className="muted small">Impressions</div><div style={{ fontSize: 24, fontWeight: 700 }}>{c.impr.toLocaleString()}<Delta v={pct(c.impr, c.imprP)} /></div><Spark data={c.is} color="#8957e5" /></div>
+        <div><div className="muted small">Avg position · {dev}</div><div style={{ fontSize: 24, fontWeight: 700 }}>{f1(c.pos)}<Delta v={c.pos && c.posPrev ? pct(c.pos, c.posPrev) : null} inv /></div>
+          <div className="small muted" style={{ marginTop: 6 }}>lower is better<br />clicks and impressions come from Search Console</div></div>
+        <div><div className="muted small">Tracked keywords <b style={{ color: "var(--ink)" }}>{c.tracked}</b>{c.ntracked > c.tracked ? ` of ${c.ntracked}` : ""}</div>
+          <table style={{ marginTop: 4 }}><tbody>{BUCKETS.map((b, i) => { const d = c.counts[i] - c.before[i]; return (<tr key={b}><td className="small" style={{ padding: "2px 6px" }}>{b}</td><td className="small" style={{ padding: "2px 6px", fontWeight: 700 }}>{c.counts[i]}</td>
+            <td className="small" style={{ padding: "2px 6px", color: d === 0 ? "var(--mut)" : (i < 2 ? d > 0 : d < 0) ? "var(--ok)" : "var(--bad)" }}>{d === 0 ? "=" : (d > 0 ? "▲ " : "▼ ") + Math.abs(d)}</td></tr>); })}</tbody></table>
+          {!c.ntracked && <Link href="/tracking" className="small">Add keywords →</Link>}</div>
+        <div><div className="muted small">Agent work</div>
+          <div className="small" style={{ marginTop: 4 }}><Link href="/proposals"><b>{c.pending}</b> waiting for approval</Link><br />{c.approved} approved · {c.applied} applied · {c.failed} failed<br />{c.published} posts published{c.drafts ? ` · ${c.drafts} drafts` : ""}</div></div>
+      </div></div>))}
+    {!loading && !sites.length && <p className="muted">No sites yet. <Link href="/sites">Add your first site</Link>.</p>}
   </Shell>);
 }
