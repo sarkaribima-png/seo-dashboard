@@ -36,8 +36,13 @@ export default function Proposals() {
       {rows.map(r => (<tr key={r.id}>
         <td className="small" style={{ minWidth: 180 }}><a href={r.page} target="_blank" rel="noreferrer">{r.page.replace(/^https?:\/\/[^/]+/, "") || "/"}</a><div className="muted">#{r.id} · {new Date(r.created_at).toLocaleDateString()}</div></td>
         <td className="small" style={{ minWidth: 320 }}>
-          <div className="old">{r.old?.title}</div><div className="new">{r.new?.title} <span className="muted">({r.new?.title?.length})</span></div>
-          <div className="old" style={{ marginTop: 6 }}>{r.old?.meta}</div><div>{r.new?.meta} <span className="muted">({r.new?.meta?.length})</span></div>
+          <div className="muted">{({ title_meta: "Title + meta", schema: "Schema", internal_link: "Internal link", content_add: "New section" } as any)[r.kind] || r.kind}{r.source ? " · " + r.source.replace("rank:", "keyword: ") : ""}</div>
+          {r.kind === "title_meta" && <><div className="old">{r.old?.title}</div><div className="new">{r.new?.title} <span className="muted">({r.new?.title?.length})</span></div>
+            <div className="old" style={{ marginTop: 6 }}>{r.old?.meta}</div><div>{r.new?.meta} <span className="muted">({r.new?.meta?.length})</span></div></>}
+          {r.kind === "schema" && <details open><summary>{r.new?.type}</summary><pre className="small" style={{ whiteSpace: "pre-wrap", maxHeight: 220, overflow: "auto" }}>{JSON.stringify(r.new?.json_ld, null, 2)}</pre></details>}
+          {r.kind === "internal_link" && <div>Link <b>“{r.new?.anchor}”</b> → <a href={r.new?.url} target="_blank" rel="noreferrer">{r.new?.url}</a><div className="muted">{r.new?.placement}</div></div>}
+          {r.kind === "content_add" && <details open><summary>{r.new?.heading} <span className="muted">(grade {r.new?.grade})</span></summary><div className="new" dangerouslySetInnerHTML={{ __html: r.new?.html || "" }} /></details>}
+          {r.kind !== "title_meta" && <div className="muted small">Applying this kind needs the next agent update (plugin v0.3). Approval is saved; nothing changes on the site until then.</div>}
           {r.reason && <details><summary className="muted">Why</summary><div className="muted">{r.reason}</div></details>}</td>
         <td><span className={`badge b-${r.status}`}>{r.status.replace("_", " ")}</span></td>
         <td style={{ whiteSpace: "nowrap" }}>
