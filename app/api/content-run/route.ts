@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const gh = process.env.GITHUB_TOKEN, repo = process.env.GITHUB_REPO;
   if (!gh || !repo) return NextResponse.json({ error: "Not configured (GITHUB_TOKEN / GITHUB_REPO)." }, { status: 501 });
   const wf = command === "postperf" ? "postperf.yml" : command === "serp" ? "serp.yml" : command === "watch" ? "watch.yml" : command === "track" ? "track.yml" : command === "rank" ? "rank.yml" : command ? "content-post.yml" : "content.yml";
-  const inputs: Record<string, string> = { site: String(site || "kalosa") };
+  const inputs: Record<string, string> = { site: String(site || "all") };
   if (command && command !== "rank" && command !== "track" && command !== "watch" && command !== "serp" && command !== "postperf") inputs.command = command;
   const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${wf}/dispatches`, {
     method: "POST", headers: { Authorization: `Bearer ${gh}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
