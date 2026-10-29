@@ -33,7 +33,7 @@ export default function Rank() {
 
   return (<Shell>
     <div className="row"><h1 style={{ margin: 0 }}>Rank a page</h1><span className="sp" /><SiteSelect sites={sites} value={site} onChange={setSite} /><button onClick={run}>Run audits now</button><button onClick={load}>Refresh</button></div>
-    <p className="muted small">Give a keyword, the page that should rank, and 1–3 competitor pages already ranking. The audit tool compares them, then the agent prepares the fixes. You only approve them in Proposals.</p>
+    <p className="muted small">Give a keyword, the page that should rank, and 1–3 competitor pages already ranking. The agent audits your page against them, then prepares the fixes. You only approve them in Proposals.</p>
     {msg && <p className="small">{msg}</p>}
     <div className="card" style={{ display: "grid", gap: 8 }}>
       <input placeholder="Keyword, e.g. liposuction cost in gurgaon" value={kw} onChange={e => setKw(e.target.value)} />
@@ -48,9 +48,11 @@ export default function Rank() {
         <td className="small" style={{ minWidth: 300 }}>
           {j.status === "ready" && <><div>{j.proposals_made} proposal(s) waiting in Proposals</div>
             {(j.report?.hypothesis || []).slice(0, 3).map((h: string, i: number) => <div key={i} className="muted">• {h}</div>)}
+            {(j.report?.scores || []).map((x: any, i: number) => <div key={i} className="muted">{x.own ? "Your page" : "Competitor"}: score {x.score}/100 · {x.words} words · {x.h2} H2{x.faq ? " · FAQ" : ""}</div>)}
+            {(j.report?.recommendations || []).slice(0, 4).map((h: string, i: number) => <div key={"r" + i} className="muted">→ {h}</div>)}
             {j.report?.confidence != null && <div className="muted">confidence: {String(j.report.confidence)}</div>}</>}
           {j.status === "failed" && <div className="muted">{j.error}</div>}
-          {j.status === "auditing" && <div className="muted">Audit running. It continues on the next run if it takes long.</div>}</td>
+          {j.status === "auditing" && <div className="muted">Audit running…</div>}</td>
         <td>{j.status === "failed" && <button onClick={() => retry(j.id)}>Retry</button>}</td></tr>))}
       {!jobs.length && <tr><td colSpan={4} className="muted">No jobs yet.</td></tr>}</tbody></table></div>
   </Shell>);
