@@ -30,7 +30,9 @@ export default function Proposals() {
     const who = cur()?.reviewer_name || "the reviewer";
     if (!confirm(`Confirm that ${who} has read this section and it is medically correct.`)) return;
     const { data: u } = await supabase.auth.getUser();
-    await supabase.from("proposals").update({ reviewed_by: cur()?.reviewer_name || u.user?.email, reviewed_at: new Date().toISOString() }).eq("id", r.id); load();
+    const { error } = await supabase.from("proposals").update({ reviewed_by: cur()?.reviewer_name || u.user?.email, reviewed_at: new Date().toISOString() }).eq("id", r.id);
+    if (error) { alert("Could not save the review: " + error.message + (error.message.includes("reviewed") ? "\n\nRun schema_v10.sql in Supabase first." : "")); return; }
+    load();
   }
   async function run() { setMsg("Starting…"); const r = await runAgent("daily"); setMsg(r.message); }
 
