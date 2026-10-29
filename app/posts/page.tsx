@@ -49,9 +49,11 @@ export default function Posts() {
       <div className="row" style={{ marginBottom: 6 }}><b>{p.title}</b><span className="sp" /><span className={`badge ${p.status === "published" || p.status === "approved" ? "b-applied" : "b-pending"}`}>{p.status}</span></div>
       <div className="small muted">{p.words} words (target {p.target_words || "–"}) · reading grade {p.grade} · {(p.images || []).length} images · {p.reviewed_at ? `reviewed by ${p.reviewed_by}, ${new Date(p.reviewed_at).toLocaleString()}` : "not reviewed"}</div>
       {!!(p.issues || []).length && <div className="small" style={{ color: "#e5a550", marginTop: 4 }}>Check: {(p.issues || []).join(" · ")}</div>}
+      {p.error && <div className="small" style={{ color: "#e5736a", marginTop: 4 }}>Problem: {p.error}</div>}
       <div className="small muted" style={{ marginTop: 4 }}>Meta title: {p.meta_title}<br />Meta description: {p.meta_description}</div>
       <div className="row" style={{ marginTop: 10, marginBottom: 0 }}>
         <button onClick={() => setOpen(open === p.id ? null : p.id)}>{open === p.id ? "Hide preview" : "Read post"}</button>
+        {cur?.wp_base && p.wp_post_id && p.status !== "published" && <a className="small" target="_blank" rel="noreferrer" href={`${cur.wp_base.replace(/\/$/, "")}/?p=${p.wp_post_id}&preview=true`}>Preview on your site</a>}
         {cur?.wp_base && p.wp_post_id && <a className="small" target="_blank" rel="noreferrer" href={`${cur.wp_base.replace(/\/$/, "")}/wp-admin/post.php?post=${p.wp_post_id}&action=edit`}>Edit in WordPress</a>}
         {p.publish_url && <a className="small" target="_blank" rel="noreferrer" href={p.publish_url}>View live</a>}
         <span className="sp" />
