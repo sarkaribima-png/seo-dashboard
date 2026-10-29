@@ -6,12 +6,12 @@ export async function POST(req: Request) {
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { site, command } = await req.json();
-  if (command && !["write", "publish", "rank"].includes(command)) return NextResponse.json({ error: "bad command" }, { status: 400 });
+  if (command && !["write", "publish", "rank", "track"].includes(command)) return NextResponse.json({ error: "bad command" }, { status: 400 });
   const gh = process.env.GITHUB_TOKEN, repo = process.env.GITHUB_REPO;
   if (!gh || !repo) return NextResponse.json({ error: "Not configured (GITHUB_TOKEN / GITHUB_REPO)." }, { status: 501 });
-  const wf = command === "rank" ? "rank.yml" : command ? "content-post.yml" : "content.yml";
+  const wf = command === "track" ? "track.yml" : command === "rank" ? "rank.yml" : command ? "content-post.yml" : "content.yml";
   const inputs: Record<string, string> = { site: String(site || "kalosa") };
-  if (command && command !== "rank") inputs.command = command;
+  if (command && command !== "rank" && command !== "track") inputs.command = command;
   const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${wf}/dispatches`, {
     method: "POST", headers: { Authorization: `Bearer ${gh}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
     body: JSON.stringify({ ref: "main", inputs }) });
