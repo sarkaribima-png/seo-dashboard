@@ -6,12 +6,12 @@ export async function POST(req: Request) {
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { site, command, limit, keyword } = await req.json();
-  if (command && !["write", "publish", "rank", "track", "watch", "serp", "postperf", "onpage", "briefs", "keywords", "tech", "report", "plan"].includes(command)) return NextResponse.json({ error: "bad command" }, { status: 400 });
+  if (command && !["write", "publish", "rank", "track", "watch", "serp", "postperf", "onpage", "briefs", "keywords", "tech", "report", "plan", "fixer", "evaluate"].includes(command)) return NextResponse.json({ error: "bad command" }, { status: 400 });
   const gh = process.env.GITHUB_TOKEN, repo = process.env.GITHUB_REPO;
   if (!gh || !repo) return NextResponse.json({ error: "Not configured (GITHUB_TOKEN / GITHUB_REPO)." }, { status: 501 });
-  const wf = command === "keywords" ? "keywords.yml" : command === "tech" ? "tech-audit.yml" : command === "report" ? "report.yml" : command === "plan" ? "orchestrator.yml" : command === "onpage" || command === "briefs" ? "onpage.yml" : command === "postperf" ? "postperf.yml" : command === "serp" ? "serp.yml" : command === "watch" ? "watch.yml" : command === "track" ? "track.yml" : command === "rank" ? "rank.yml" : command ? "content-post.yml" : "content.yml";
+  const wf = command === "fixer" ? "technical-fixer.yml" : command === "evaluate" ? "evaluator.yml" : command === "keywords" ? "keywords.yml" : command === "tech" ? "tech-audit.yml" : command === "report" ? "report.yml" : command === "plan" ? "orchestrator.yml" : command === "onpage" || command === "briefs" ? "onpage.yml" : command === "postperf" ? "postperf.yml" : command === "serp" ? "serp.yml" : command === "watch" ? "watch.yml" : command === "track" ? "track.yml" : command === "rank" ? "rank.yml" : command ? "content-post.yml" : "content.yml";
   const inputs: Record<string, string> = { site: String(site || "all") };
-  if (command && command !== "rank" && command !== "track" && command !== "watch" && command !== "serp" && command !== "postperf" && command !== "onpage" && command !== "briefs" && !["keywords", "tech", "report", "plan"].includes(command)) inputs.command = command;
+  if (command && command !== "rank" && command !== "track" && command !== "watch" && command !== "serp" && command !== "postperf" && command !== "onpage" && command !== "briefs" && !["keywords", "tech", "report", "plan", "fixer", "evaluate"].includes(command)) inputs.command = command;
   if (command === "onpage" || command === "briefs") {
     inputs.task = command; inputs.limit = String(Math.max(1, Math.min(60, Number(limit) || 20)));
     if (command === "briefs" && typeof keyword === "string" && keyword.trim()) inputs.keyword = keyword.trim().slice(0, 150);
