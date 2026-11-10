@@ -11,3 +11,11 @@ export async function runAgent(command: string, proposal_id?: number, site?: str
   const j = await r.json().catch(() => ({}));
   return { ok: r.ok, message: j.message || j.error || "" };
 }
+export async function runContent(command: string, site: string, extra: { limit?: number; keyword?: string } = {}) {
+  const { data } = await supabase.auth.getSession();
+  const r = await fetch("/api/content-run", { method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` },
+    body: JSON.stringify({ command, site, ...extra }) });
+  const j = await r.json().catch(() => ({}));
+  return { ok: r.ok, message: j.message || j.error || "" };
+}
